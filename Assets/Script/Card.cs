@@ -61,6 +61,12 @@ public class Card : MonoBehaviour
     private float dragThreshold = 0.5f; // 드래그로 인정할 최소 이동 거리
     private bool isDragStarted = false; // 드래그가 시작되었는지 확인하는 변수
     private float cardWidth = 1.3f; // 카드의 너비 (스케일 고려)
+    private float swapThreshold = 0.2f; // 카드 위치 교환을 위한 임계값
+    private Vector3 lastMovedCardPosition; // 마지막으로 이동한 카드의 원래 위치
+    private float lastMoveTime; // 마지막 이동 시간을 저장
+    private const float DIRECTION_CHANGE_DELAY = 0.35f; // 방향 전환 딜레이
+    private int lastMoveDirection = 0; // 마지막 이동 방향 (1: 오른쪽, -1: 왼쪽)
+    private Vector3 lastMousePosition; // 이전 프레임의 마우스 위치
 
     void Awake()
     {
@@ -68,11 +74,11 @@ public class Card : MonoBehaviour
         originalScale = new Vector3(2f, 2f, 2f); // 기본 크기를 2로 설정
         hoverScale = new Vector3(2.3f, 2.3f, 2.3f); // 호버 시 크기를 2.3으로 설정
         transform.localScale = originalScale;
-
+        
         // DeckManager 찾기
         deckManager = FindObjectOfType<DeckManager>();
         mainCamera = Camera.main;
-
+        
         // 카드 이미지 초기화
         if (cardSprites.Count == 0)
         {
@@ -119,12 +125,12 @@ public class Card : MonoBehaviour
     void OnMouseDown()
     {
         if (!isMouseOver) return;
-
+        
         isDragging = false;
         isDragStarted = false;
         mouseDownPosition = mainCamera.ScreenToWorldPoint(Input.mousePosition);
         StopCurrentAnimation();
-
+        
         // 클릭 시 가장 위 레이어로 이동
         spriteRenderer.sortingOrder = 10;
     }
@@ -150,6 +156,74 @@ public class Card : MonoBehaviour
             // 마우스 위치를 월드 좌표로 변환하고 x축만 업데이트
             Vector3 currentMousePosition = mainCamera.ScreenToWorldPoint(Input.mousePosition);
             transform.position = new Vector3(currentMousePosition.x + dragOffset, transform.position.y, transform.position.z);
+
+            // 드래그 중인 카드의 양쪽 끝 위치 계산
+            float rightEdge = transform.position.x + (cardWidth * transform.localScale.x / 2);
+            float leftEdge = transform.position.x - (cardWidth * transform.localScale.x / 2);
+            
+            // 모든 카드를 확인하여 위치 교환 체크
+            foreach (Card card in deckManager.GetHand())
+            {
+                if (card != null && card != this)
+                {
+                    float cardCenter = card.originalPosition.x;
+                    
+                    // 오른쪽으로 드래그하는 경우
+                    if (card.originalPosition.x > originalPosition.x)
+                    {
+                        float distanceToSwap = rightEdge - cardCenter;
+                        if (distanceToSwap >= swapThreshold)
+                        {
+                            // 방향이 바뀌었을 때만 딜레이 체크
+                            if (lastMoveDirection == -1)
+                            {
+                                float timeSinceLastMove = Time.time - lastMoveTime;
+                                if (timeSinceLastMove < DIRECTION_CHANGE_DELAY)
+                                {
+                                    continue;
+                                }
+                            }
+
+                            // 이동하기 전 카드의 원래 위치 저장
+                            lastMovedCardPosition = card.originalPosition;
+                            // 위치 교환
+                            deckManager.MoveCardLeft(card);
+                            // 드래그 중인 카드의 originalPosition 업데이트
+                            originalPosition = new Vector3(card.originalPosition.x + 1.3f, originalPosition.y, originalPosition.z);
+                            lastMoveDirection = 1;
+                            lastMoveTime = Time.time;
+                            break;
+                        }
+                    }
+                    // 왼쪽으로 드래그하는 경우
+                    else if (card.originalPosition.x < originalPosition.x)
+                    {
+                        float distanceToSwap = cardCenter - leftEdge;
+                        if (distanceToSwap >= swapThreshold)
+                        {
+                            // 방향이 바뀌었을 때만 딜레이 체크
+                            if (lastMoveDirection == 1)
+                            {
+                                float timeSinceLastMove = Time.time - lastMoveTime;
+                                if (timeSinceLastMove < DIRECTION_CHANGE_DELAY)
+                                {
+                                    continue;
+                                }
+                            }
+
+                            // 이동하기 전 카드의 원래 위치 저장
+                            lastMovedCardPosition = card.originalPosition;
+                            // 위치 교환
+                            deckManager.MoveCardRight(card);
+                            // 드래그 중인 카드의 originalPosition 업데이트
+                            originalPosition = new Vector3(card.originalPosition.x - 1.3f, originalPosition.y, originalPosition.z);
+                            lastMoveDirection = -1;
+                            lastMoveTime = Time.time;
+                            break;
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -160,8 +234,24 @@ public class Card : MonoBehaviour
             isDragging = false;
             isDragStarted = false;
 
-            // 원래 위치로 돌아가기
-            transform.position = originalPosition;
+            // 마지막으로 이동한 카드의 위치로 이동
+            if (lastMovedCardPosition != Vector3.zero)
+            {
+                // 선택 상태에 따라 y축 위치 결정
+                float targetY = isSelected ? -3f : -3.5f;
+                lastMovedCardPosition.y = targetY;
+                transform.position = lastMovedCardPosition;
+                originalPosition = lastMovedCardPosition;
+                lastMovedCardPosition = Vector3.zero; // 위치 정보 초기화
+            }
+            else
+            {
+                // 이동한 카드가 없으면 원래 위치로 돌아가기
+                // 선택 상태에 따라 y축 위치 결정
+                float targetY = isSelected ? -3f : -3.5f;
+                originalPosition.y = targetY;
+                transform.position = originalPosition;
+            }
         }
         else if (isMouseOver) // 클릭 이벤트 처리
         {
@@ -219,7 +309,7 @@ public class Card : MonoBehaviour
         float elapsedTime = 0;
         Vector3 startScale = transform.localScale;
         Vector3 targetScale = hover ? hoverScale : originalScale;
-
+        
         while (elapsedTime < animationDuration)
         {
             elapsedTime += Time.deltaTime;
@@ -239,7 +329,7 @@ public class Card : MonoBehaviour
         isAnimating = true;
         float elapsedTime = 0;
         Vector3 startPosition = transform.position;
-
+        
         while (elapsedTime < animationDuration)
         {
             elapsedTime += Time.deltaTime;

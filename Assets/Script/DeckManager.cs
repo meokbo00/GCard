@@ -124,9 +124,9 @@ public class DeckManager : MonoBehaviour
         ShuffleDeck();
     }
 
-    public List<Card> GetHand()
+    public Card[] GetHand()
     {
-        return hand;
+        return hand.ToArray();
     }
 
     public int GetDeckCount()
@@ -250,105 +250,21 @@ public class DeckManager : MonoBehaviour
         StartCoroutine(MoveCardsRightCoroutine());
     }
 
-    private IEnumerator MoveCardsRightCoroutine()
+    public void HandPlay()
     {
-        float moveDuration = 0.3f; // 이동 시간
-        float maxX = 10f; // 최대 x 좌표
-        List<Vector3> emptyPositions = new List<Vector3>(); // 빈 자리 위치들을 저장할 리스트
+        // 선택된 카드가 없으면 아무 동작도 하지 않음
+        if (selectedCards.Count == 0) return;
 
-        // 선택된 카드들의 시작 위치와 목표 위치 저장
-        Dictionary<Card, (Vector3 start, Vector3 target)> cardPositions = new Dictionary<Card, (Vector3, Vector3)>();
+        // 선택된 카드들을 위로 이동
         foreach (Card card in selectedCards)
         {
             if (card != null)
             {
-                // x축 위치만 저장하고 y축은 -3.5로 고정
-                Vector3 emptyPos = card.transform.position;
-                emptyPos.y = -3.5f;
-                emptyPositions.Add(emptyPos);
-
-                // 시작 위치와 목표 위치 저장
-                Vector3 targetPos = new Vector3(maxX, card.transform.position.y, 0f);
-                cardPositions[card] = (card.transform.position, targetPos);
+                Vector3 currentPos = card.transform.position;
+                Vector3 targetPos = new Vector3(currentPos.x, currentPos.y + 2.5f, currentPos.z);
+                StartCoroutine(MoveCardToPosition(card, targetPos));
+                card.originalPosition = targetPos; // originalPosition도 업데이트
             }
-        }
-
-        // 모든 카드를 동시에 이동
-        float elapsedTime = 0f;
-        while (elapsedTime < moveDuration)
-        {
-            elapsedTime += Time.deltaTime;
-            float t = elapsedTime / moveDuration;
-            t = Mathf.SmoothStep(0, 1, t); // 부드러운 보간
-
-            for (int i = selectedCards.Count - 1; i >= 0; i--)
-            {
-                Card card = selectedCards[i];
-                if (card != null && cardPositions.ContainsKey(card))
-                {
-                    var (start, target) = cardPositions[card];
-                    card.transform.position = Vector3.Lerp(start, target, t);
-
-                    // x 좌표가 maxX에 도달하면 카드 비활성화
-                    if (card.transform.position.x >= maxX)
-                    {
-                        card.gameObject.SetActive(false);
-                        card.isSelected = false; // 선택 상태도 해제
-                    }
-                }
-            }
-
-            yield return null;
-        }
-
-        // 모든 선택된 카드의 선택 상태 해제 및 리스트 비우기
-        foreach (Card card in selectedCards)
-        {
-            if (card != null)
-            {
-                card.isSelected = false;
-            }
-        }
-        selectedCards.Clear(); // selectedCards 리스트 비우기
-
-        // 모든 새로운 카드를 먼저 생성
-        List<(Card card, Vector3 target)> newCards = new List<(Card, Vector3)>();
-        foreach (Vector3 emptyPos in emptyPositions)
-        {
-            Card newCard = DrawCard();
-            if (newCard != null)
-            {
-                // 새로운 카드를 (10, -3.5) 위치에서 시작
-                Vector3 startPos = new Vector3(10f, -3.5f, 0f);
-                newCard.transform.position = startPos;
-                newCard.SetOriginalPosition(emptyPos);
-                // 새로운 카드는 선택되지 않은 상태로 생성
-                newCard.isSelected = false;
-                newCards.Add((newCard, emptyPos));
-            }
-        }
-
-        // 모든 카드를 동시에 이동
-        elapsedTime = 0f;
-        while (elapsedTime < moveDuration)
-        {
-            elapsedTime += Time.deltaTime;
-            float t = elapsedTime / moveDuration;
-            t = Mathf.SmoothStep(0, 1, t); // 부드러운 보간
-
-            foreach (var (card, target) in newCards)
-            {
-                Vector3 startPos = new Vector3(10f, -3.5f, 0f);
-                card.transform.position = Vector3.Lerp(startPos, target, t);
-            }
-
-            yield return null;
-        }
-
-        // 모든 카드의 최종 위치 설정
-        foreach (var (card, target) in newCards)
-        {
-            card.transform.position = target;
         }
     }
 
@@ -362,77 +278,6 @@ public class DeckManager : MonoBehaviour
     {
         Debug.Log("rank 메서드 실행");
         StartCoroutine(RankCoroutine());
-    }
-
-    private IEnumerator ShapeCoroutine()
-    {
-        // 현재 활성화된 카드들을 수집
-        List<Card> activeCards = new List<Card>();
-        foreach (Card card in hand)
-        {
-            if (card.gameObject.activeSelf)
-            {
-                activeCards.Add(card);
-            }
-        }
-
-        // 카드를 모양에 따라 정렬 (스페이드, 다이아, 하트, 클로버 순서)
-        activeCards.Sort((a, b) => {
-            // 모양 순서 정의
-            Dictionary<Card.Suit, int> suitOrder = new Dictionary<Card.Suit, int>
-            {
-                { Card.Suit.Spades, 0 },
-                { Card.Suit.Diamonds, 1 },
-                { Card.Suit.Hearts, 2 },
-                { Card.Suit.Clubs, 3 }
-            };
-
-            // 모양이 같으면 숫자 순으로 정렬
-            if (a.suit == b.suit)
-            {
-                return a.rank.CompareTo(b.rank);
-            }
-            return suitOrder[a.suit].CompareTo(suitOrder[b.suit]);
-        });
-
-        // 정렬된 카드들의 시작 위치와 목표 위치 저장
-        Vector3 startPosition = new Vector3(-4f, -3.5f, 0f);
-        float xOffset = 1.3f; // x축 간격
-        float moveDuration = 0.5f; // 이동 시간
-
-        // 각 카드의 시작 위치와 목표 위치 저장
-        Dictionary<Card, (Vector3 start, Vector3 target)> cardPositions = new Dictionary<Card, (Vector3, Vector3)>();
-        for (int i = 0; i < activeCards.Count; i++)
-        {
-            Card card = activeCards[i];
-            Vector3 targetPosition = startPosition + new Vector3(i * xOffset, 0f, 0f);
-            cardPositions[card] = (card.transform.position, targetPosition);
-        }
-
-        // 모든 카드를 동시에 이동
-        float elapsedTime = 0f;
-        while (elapsedTime < moveDuration)
-        {
-            elapsedTime += Time.deltaTime;
-            float t = elapsedTime / moveDuration;
-            t = Mathf.SmoothStep(0, 1, t); // 부드러운 보간
-
-            foreach (var card in activeCards)
-            {
-                var (start, target) = cardPositions[card];
-                card.transform.position = Vector3.Lerp(start, target, t);
-            }
-
-            yield return null;
-        }
-
-        // 모든 카드의 최종 위치 설정
-        foreach (var card in activeCards)
-        {
-            var (_, target) = cardPositions[card];
-            card.transform.position = target;
-            card.SetOriginalPosition(target);
-        }
     }
 
     private IEnumerator SuitCoroutine()
@@ -619,28 +464,30 @@ public class DeckManager : MonoBehaviour
 
     public void MoveCardLeft(Card card)
     {
-        if (card == null) return;
-
-        // 카드의 현재 위치에서 왼쪽으로 한 칸 이동
-        Vector3 newPosition = card.originalPosition;
-        newPosition.x -= 1.3f;
+        float targetY = card.isSelected ? -3f : -3.5f; // 선택 상태에 따라 y축 위치 결정
+        Vector3 newPosition = new Vector3(card.originalPosition.x - 1.3f, targetY, card.originalPosition.z);
         card.originalPosition = newPosition;
-        
-        // 카드를 새로운 위치로 부드럽게 이동
+        StartCoroutine(MoveCardToPosition(card, newPosition));
+    }
+
+    public void MoveCardRight(Card card)
+    {
+        float targetY = card.isSelected ? -3f : -3.5f; // 선택 상태에 따라 y축 위치 결정
+        Vector3 newPosition = new Vector3(card.originalPosition.x + 1.3f, targetY, card.originalPosition.z);
+        card.originalPosition = newPosition;
         StartCoroutine(MoveCardToPosition(card, newPosition));
     }
 
     private IEnumerator MoveCardToPosition(Card card, Vector3 targetPosition)
     {
-        float duration = 0.2f;
-        float elapsedTime = 0;
+        float duration = 0.2f; // 이동 애니메이션 지속 시간
+        float elapsedTime = 0f;
         Vector3 startPosition = card.transform.position;
         
         while (elapsedTime < duration)
         {
             elapsedTime += Time.deltaTime;
-            float t = elapsedTime / duration;
-            t = Mathf.SmoothStep(0, 1, t);
+            float t = Mathf.SmoothStep(0, 1, elapsedTime / duration);
             card.transform.position = Vector3.Lerp(startPosition, targetPosition, t);
             yield return null;
         }
@@ -705,5 +552,107 @@ public class DeckManager : MonoBehaviour
         }
 
         return new Vector3(nearestEmptyX, currentPosition.y, currentPosition.z);
+    }
+
+    private IEnumerator MoveCardsRightCoroutine()
+    {
+        float moveDuration = 0.3f; // 이동 시간
+        float maxX = 10f; // 최대 x 좌표
+        List<Vector3> emptyPositions = new List<Vector3>(); // 빈 자리 위치들을 저장할 리스트
+
+        // 선택된 카드들의 시작 위치와 목표 위치 저장
+        Dictionary<Card, (Vector3 start, Vector3 target)> cardPositions = new Dictionary<Card, (Vector3, Vector3)>();
+        foreach (Card card in selectedCards)
+        {
+            if (card != null)
+            {
+                // x축 위치만 저장하고 y축은 -3.5로 고정
+                Vector3 emptyPos = card.transform.position;
+                emptyPos.y = -3.5f;
+                emptyPositions.Add(emptyPos);
+
+                // 시작 위치와 목표 위치 저장
+                Vector3 targetPos = new Vector3(maxX, card.transform.position.y, 0f);
+                cardPositions[card] = (card.transform.position, targetPos);
+            }
+        }
+
+        // 모든 카드를 동시에 이동
+        float elapsedTime = 0f;
+        while (elapsedTime < moveDuration)
+        {
+            elapsedTime += Time.deltaTime;
+            float t = elapsedTime / moveDuration;
+            t = Mathf.SmoothStep(0, 1, t); // 부드러운 보간
+
+            for (int i = selectedCards.Count - 1; i >= 0; i--)
+            {
+                Card card = selectedCards[i];
+                if (card != null && cardPositions.ContainsKey(card))
+                {
+                    var (start, target) = cardPositions[card];
+                    card.transform.position = Vector3.Lerp(start, target, t);
+
+                    // x 좌표가 maxX에 도달하면 카드 비활성화
+                    if (card.transform.position.x >= maxX)
+                    {
+                        card.gameObject.SetActive(false);
+                        card.isSelected = false; // 선택 상태도 해제
+                    }
+                }
+            }
+
+            yield return null;
+        }
+
+        // 모든 선택된 카드의 선택 상태 해제 및 리스트 비우기
+        foreach (Card card in selectedCards)
+        {
+            if (card != null)
+            {
+                card.isSelected = false;
+            }
+        }
+        selectedCards.Clear(); // selectedCards 리스트 비우기
+
+        // 모든 새로운 카드를 먼저 생성
+        List<(Card card, Vector3 target)> newCards = new List<(Card, Vector3)>();
+        foreach (Vector3 emptyPos in emptyPositions)
+        {
+            Card newCard = DrawCard();
+            if (newCard != null)
+            {
+                // 새로운 카드를 (10, -3.5) 위치에서 시작
+                Vector3 startPos = new Vector3(10f, -3.5f, 0f);
+                newCard.transform.position = startPos;
+                newCard.SetOriginalPosition(emptyPos);
+                // 새로운 카드는 선택되지 않은 상태로 생성
+                newCard.isSelected = false;
+                newCards.Add((newCard, emptyPos));
+            }
+        }
+
+        // 모든 카드를 동시에 이동
+        elapsedTime = 0f;
+        while (elapsedTime < moveDuration)
+        {
+            elapsedTime += Time.deltaTime;
+            float t = elapsedTime / moveDuration;
+            t = Mathf.SmoothStep(0, 1, t); // 부드러운 보간
+
+            foreach (var (card, target) in newCards)
+            {
+                Vector3 startPos = new Vector3(10f, -3.5f, 0f);
+                card.transform.position = Vector3.Lerp(startPos, target, t);
+            }
+
+            yield return null;
+        }
+
+        // 모든 카드의 최종 위치 설정
+        foreach (var (card, target) in newCards)
+        {
+            card.transform.position = target;
+        }
     }
 }

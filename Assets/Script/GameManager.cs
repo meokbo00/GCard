@@ -32,4 +32,9 @@ public class GameManager : MonoBehaviour
     {
         deckManager.TrashMove();
     }
+
+    public void OnHandPlayButtonClick()
+    {
+        deckManager.HandPlay();
+    }
 }

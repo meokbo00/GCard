@@ -10,6 +10,7 @@ public class HandRanking : MonoBehaviour
     public TextMeshProUGUI handRankText; // UI 텍스트 연결용 변수
     public TextMeshProUGUI blueChipText; // 블루 칩 값 표시용 텍스트
     public TextMeshProUGUI redChipText; // 레드 칩 값 표시용 텍스트
+    public TextMeshProUGUI sumPointText; // 총 포인트 표시용 텍스트
     public float BlueChip = 0f; // 블루 칩 값
     public float RedChip = 0f; // 레드 칩 값
 
@@ -43,6 +44,11 @@ public class HandRanking : MonoBehaviour
         if (redChipText != null)
         {
             redChipText.text = RedChip.ToString();
+        }
+        if (sumPointText != null)
+        {
+            float totalPoint = BlueChip * RedChip;
+            sumPointText.text = totalPoint.ToString();
         }
     }
 
