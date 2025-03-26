@@ -25,10 +25,11 @@ public class Card : MonoBehaviour
     public bool isJoker = false;
 
     private SpriteRenderer spriteRenderer;
-    private Vector3 originalPosition;
+    public Vector3 originalPosition;
     private Vector3 hoverPosition;
     private bool isAnimating = false;
     private Coroutine currentAnimation;
+    private int originalSortingOrder; // 원래의 정렬 순서 저장
 
     // 애니메이션 설정
     [Header("Animation Settings")]
@@ -51,21 +52,35 @@ public class Card : MonoBehaviour
 
     private DeckManager deckManager;
 
+    private bool isMouseOver = false; // 마우스가 카드 위에 있는지 확인하는 변수 추가
+
+    private bool isDragging = false; // 드래그 중인지 확인하는 변수
+    private float dragOffset; // 드래그 시작 시 카드와 마우스 포인트의 x축 차이
+    private Camera mainCamera; // 메인 카메라 참조
+    private Vector3 mouseDownPosition; // 마우스 다운 시의 위치
+    private float dragThreshold = 0.5f; // 드래그로 인정할 최소 이동 거리
+    private bool isDragStarted = false; // 드래그가 시작되었는지 확인하는 변수
+    private float cardWidth = 1.3f; // 카드의 너비 (스케일 고려)
+
     void Awake()
     {
         spriteRenderer = GetComponent<SpriteRenderer>();
         originalScale = new Vector3(2f, 2f, 2f); // 기본 크기를 2로 설정
         hoverScale = new Vector3(2.3f, 2.3f, 2.3f); // 호버 시 크기를 2.3으로 설정
         transform.localScale = originalScale;
-        
+
         // DeckManager 찾기
         deckManager = FindObjectOfType<DeckManager>();
-        
+        mainCamera = Camera.main;
+
         // 카드 이미지 초기화
         if (cardSprites.Count == 0)
         {
             LoadCardSprites();
         }
+
+        // 원래의 정렬 순서 저장
+        originalSortingOrder = spriteRenderer.sortingOrder;
     }
 
     private void LoadCardSprites()
@@ -84,56 +99,109 @@ public class Card : MonoBehaviour
             StopCurrentAnimation();
             currentAnimation = StartCoroutine(HoverAnimation(true));
         }
+        isMouseOver = true; // 마우스가 카드 위에 있음을 표시
     }
 
     void OnMouseExit()
     {
-        if (!isMovingToOriginal && !isMovingToSelected) // 원래 위치나 선택된 위치로 이동 중이 아닐 때만 호버 애니메이션 적용
+        if (!isMovingToOriginal && !isMovingToSelected)
         {
             StopCurrentAnimation();
             currentAnimation = StartCoroutine(HoverAnimation(false));
         }
-        else if (isSelected) // 선택된 상태에서 마우스를 떼면 크기를 원래대로
+        else if (isSelected)
         {
             transform.localScale = originalScale;
         }
+        isMouseOver = false; // 마우스가 카드 위에 없음을 표시
     }
 
     void OnMouseDown()
     {
-        if (!isSelected)
-        {
-            // 카드를 선택하려고 할 때 최대 개수 체크
-            if (!deckManager.CanSelectCard())
-            {
-                return; // 최대 개수에 도달했으면 선택하지 않음
-            }
-            deckManager.AddSelectedCard(this);
-        }
-        else
-        {
-            deckManager.RemoveSelectedCard(this);
-        }
+        if (!isMouseOver) return;
 
-        isSelected = !isSelected;
+        isDragging = false;
+        isDragStarted = false;
+        mouseDownPosition = mainCamera.ScreenToWorldPoint(Input.mousePosition);
         StopCurrentAnimation();
 
-        if (isSelected)
+        // 클릭 시 가장 위 레이어로 이동
+        spriteRenderer.sortingOrder = 10;
+    }
+
+    void OnMouseDrag()
+    {
+        if (!isDragStarted && isMouseOver)
         {
-            isMovingToOriginal = false;
-            isMovingToSelected = true;
-            selectedPosition = transform.position;
-            selectedPosition.y = -3f; // 선택 시 y축 위치를 -3으로 설정
-            currentAnimation = StartCoroutine(MoveToPosition(selectedPosition));
+            Vector3 currentMousePosition = mainCamera.ScreenToWorldPoint(Input.mousePosition);
+            float dragDistance = Mathf.Abs(currentMousePosition.x - mouseDownPosition.x);
+
+            // 드래그 거리가 임계값을 넘으면 드래그 시작
+            if (dragDistance > dragThreshold)
+            {
+                isDragStarted = true;
+                isDragging = true;
+                dragOffset = transform.position.x - currentMousePosition.x;
+            }
         }
-        else
+
+        if (isDragging)
         {
-            isMovingToOriginal = true;
-            isMovingToSelected = false;
-            Vector3 targetPosition = transform.position;
-            targetPosition.y = -3.5f; // 선택 해제 시 y축 위치를 -3.5로 설정
-            currentAnimation = StartCoroutine(MoveToPosition(targetPosition));
+            // 마우스 위치를 월드 좌표로 변환하고 x축만 업데이트
+            Vector3 currentMousePosition = mainCamera.ScreenToWorldPoint(Input.mousePosition);
+            transform.position = new Vector3(currentMousePosition.x + dragOffset, transform.position.y, transform.position.z);
         }
+    }
+
+    void OnMouseUp()
+    {
+        if (isDragging)
+        {
+            isDragging = false;
+            isDragStarted = false;
+
+            // 원래 위치로 돌아가기
+            transform.position = originalPosition;
+        }
+        else if (isMouseOver) // 클릭 이벤트 처리
+        {
+            // 클릭이었다면 선택/해제 처리
+            if (!isSelected)
+            {
+                if (!deckManager.CanSelectCard())
+                {
+                    return;
+                }
+                deckManager.AddSelectedCard(this);
+            }
+            else
+            {
+                deckManager.RemoveSelectedCard(this);
+            }
+
+            isSelected = !isSelected;
+            StopCurrentAnimation();
+
+            if (isSelected)
+            {
+                isMovingToOriginal = false;
+                isMovingToSelected = true;
+                selectedPosition = originalPosition;
+                selectedPosition.y = -3f;
+                currentAnimation = StartCoroutine(MoveToPosition(selectedPosition));
+            }
+            else
+            {
+                isMovingToOriginal = true;
+                isMovingToSelected = false;
+                Vector3 targetPosition = originalPosition;
+                targetPosition.y = -3.5f;
+                currentAnimation = StartCoroutine(MoveToPosition(targetPosition));
+            }
+        }
+
+        // 원래의 정렬 순서로 복원
+        spriteRenderer.sortingOrder = originalSortingOrder;
     }
 
     private void StopCurrentAnimation()
@@ -151,7 +219,7 @@ public class Card : MonoBehaviour
         float elapsedTime = 0;
         Vector3 startScale = transform.localScale;
         Vector3 targetScale = hover ? hoverScale : originalScale;
-        
+
         while (elapsedTime < animationDuration)
         {
             elapsedTime += Time.deltaTime;
@@ -171,7 +239,7 @@ public class Card : MonoBehaviour
         isAnimating = true;
         float elapsedTime = 0;
         Vector3 startPosition = transform.position;
-        
+
         while (elapsedTime < animationDuration)
         {
             elapsedTime += Time.deltaTime;
@@ -184,8 +252,8 @@ public class Card : MonoBehaviour
         transform.position = targetPosition;
         isAnimating = false;
         currentAnimation = null;
-        isMovingToOriginal = false; // 애니메이션 완료 후 플래그 초기화
-        isMovingToSelected = false; // 애니메이션 완료 후 플래그 초기화
+        isMovingToOriginal = false;
+        isMovingToSelected = false;
     }
 
     public void Initialize(Suit newSuit, Rank newRank)
@@ -254,4 +322,4 @@ public class Card : MonoBehaviour
             return "Joker";
         return $"{rank} of {suit}";
     }
-} 
+}

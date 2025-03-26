@@ -604,4 +604,106 @@ public class DeckManager : MonoBehaviour
             card.SetOriginalPosition(target);
         }
     }
+
+    public Card GetCardAtPosition(float xPosition)
+    {
+        foreach (Card card in hand)
+        {
+            if (card != null && Mathf.Approximately(card.originalPosition.x, xPosition))
+            {
+                return card;
+            }
+        }
+        return null;
+    }
+
+    public void MoveCardLeft(Card card)
+    {
+        if (card == null) return;
+
+        // 카드의 현재 위치에서 왼쪽으로 한 칸 이동
+        Vector3 newPosition = card.originalPosition;
+        newPosition.x -= 1.3f;
+        card.originalPosition = newPosition;
+        
+        // 카드를 새로운 위치로 부드럽게 이동
+        StartCoroutine(MoveCardToPosition(card, newPosition));
+    }
+
+    private IEnumerator MoveCardToPosition(Card card, Vector3 targetPosition)
+    {
+        float duration = 0.2f;
+        float elapsedTime = 0;
+        Vector3 startPosition = card.transform.position;
+        
+        while (elapsedTime < duration)
+        {
+            elapsedTime += Time.deltaTime;
+            float t = elapsedTime / duration;
+            t = Mathf.SmoothStep(0, 1, t);
+            card.transform.position = Vector3.Lerp(startPosition, targetPosition, t);
+            yield return null;
+        }
+        
+        card.transform.position = targetPosition;
+    }
+
+    public Vector3 FindNearestEmptyPosition(Vector3 currentPosition)
+    {
+        float xOffset = 1.3f; // 카드 간격
+        float startX = -4f; // 첫 번째 카드의 x 좌표
+        List<float> occupiedPositions = new List<float>();
+
+        // 현재 사용 중인 모든 x 좌표 수집
+        foreach (Card card in hand)
+        {
+            if (card != null)
+            {
+                occupiedPositions.Add(card.originalPosition.x);
+            }
+        }
+
+        // 현재 위치에서 가장 가까운 왼쪽 빈 자리 찾기
+        float nearestEmptyX = startX;
+        float minDistance = float.MaxValue;
+
+        // 왼쪽에서 오른쪽으로 순차적으로 검사
+        for (int i = 0; i < 8; i++)
+        {
+            float potentialX = startX + (i * xOffset);
+            if (!occupiedPositions.Contains(potentialX))
+            {
+                // 현재 위치보다 왼쪽에 있는 빈 자리만 고려
+                if (potentialX < currentPosition.x)
+                {
+                    float distance = Mathf.Abs(potentialX - currentPosition.x);
+                    if (distance < minDistance)
+                    {
+                        minDistance = distance;
+                        nearestEmptyX = potentialX;
+                    }
+                }
+            }
+        }
+
+        // 만약 왼쪽에 빈 자리가 없다면, 현재 위치에서 가장 가까운 오른쪽 빈 자리 찾기
+        if (nearestEmptyX == startX)
+        {
+            for (int i = 0; i < 8; i++)
+            {
+                float potentialX = startX + (i * xOffset);
+                if (!occupiedPositions.Contains(potentialX))
+                {
+                    float distance = Mathf.Abs(potentialX - currentPosition.x);
+                    if (distance < minDistance)
+                    {
+                        minDistance = distance;
+                        nearestEmptyX = potentialX;
+                    }
+                }
+            }
+        }
+
+        return new Vector3(nearestEmptyX, currentPosition.y, currentPosition.z);
+    }
 }
