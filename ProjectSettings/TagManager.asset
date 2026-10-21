@@ -3,7 +3,24 @@
 --- !u!78 &1
 TagManager:
   serializedVersion: 2
-  tags: []
+  tags:
+  - Card
+  - Zoker
+  - ItemPack
+  - Voucher
+  - Planet
+  - Taro
+  - DropZone
+  - Joker
+  - JokerZone
+  - BuyJoker
+  - ItemZone
+  - BuyTaro
+  - BuyPlanet
+  - SellZone
+  - JokerSlot
+  - TaroAndPlanetZone
+  - MoneyPack
   layers:
   - Default
   - TransparentFX
@@ -11,9 +28,9 @@ TagManager:
   - 
   - Water
   - UI
-  - 
-  - 
-  - 
+  - Cards
+  - PlayZone
+  - JokerZone
   - 
   - 
   - 
